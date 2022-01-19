@@ -83,6 +83,8 @@ def ssh_connect(ipaddress):
                     ssh_cli.send('terminal length 0\n'.encode())
                     time.sleep(0.5)
                     ssh_cli.send('sh run | i tacacs-server host\n'.encode())
+
+                    # This timer needed for buffered result in "result"
                     time.sleep(3)
 
                     result = ssh_cli.recv(99999).decode('ascii')
@@ -115,7 +117,8 @@ def ssh_connect(ipaddress):
                     time.sleep(1)
                     ssh_cli.send('dis cur | i hwtacacs server authentication\n'.encode())
 
-                    time.sleep(2)
+                    # This timer needed for buffered result in "result"
+                    time.sleep(3)
 
                     result = ssh_cli.recv(99999).decode('ascii')
 
