@@ -64,50 +64,6 @@ def get_device_id(ipaddress):
     return vendor_id
 
 
-# Old function ssh connectivity and sensing device commands
-# noinspection PyTypeChecker
-def connect_ssh_old(ip_list, commands_name):
-    print(ip_list)
-    print(*ip_list)
-    try:
-        for host in ip_list:
-            # ping = subprocess.call(['ping', '-c', '1', host])
-            # if ping ==0:
-            print(colors.BOLD + f"\nStart to connection: {host}" + colors.ENDC)
-            vendor = get_device_id(host)
-            print(vendor + ' is here')
-            client = paramiko.SSHClient()
-            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            try:
-                client.connect(hostname=host, username=user, password=password, port=port, look_for_keys=False,
-                               allow_agent=False, timeout=5)
-            except Exception as e:
-                print(colors.FAIL + f"\nError: {e}" + colors.ENDC)
-            try:
-                with client.invoke_shell() as ssh:
-                    time.sleep(1)
-                    ssh.send('terminal length 0\n')
-                    time.sleep(1)
-                    #                    ssh.send('sh ver\n ')
-                    #                    time.sleep(1)
-                    print(commands_name)
-                    ssh.send(commands_name)
-                    time.sleep(1)
-
-                    result = ssh.recv(99999).decode('ascii')
-                    if re.search(r'\bCisco\b', result):
-                        print('Cisco is here ssh')
-                    print(result)
-
-                    client.close()
-            except Exception as e:
-                print(f"\nError: {e}")
-            print(colors.BOLD + f"\nEnd {host}" + colors.ENDC)
-    except Exception as e:
-        print(f"\nCritical error: {e}")
-    return
-
-
 # Function ssh connectivity and sensing device commands without multiprocessing
 def ssh_connect(ipaddress):
     vendor = get_device_id(ipaddress)
@@ -127,7 +83,7 @@ def ssh_connect(ipaddress):
                     ssh_cli.send('terminal length 0\n'.encode())
                     time.sleep(0.5)
                     ssh_cli.send('sh run | i tacacs-server host\n'.encode())
-                    time.sleep(2)
+                    time.sleep(3)
 
                     result = ssh_cli.recv(99999).decode('ascii')
 
