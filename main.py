@@ -14,22 +14,41 @@ from settings import *
 start_time = datetime.now()
 
 
+def check_ip(ipaddress):
+    check_ipaddress = re.findall(r"^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1"
+                                 "[0-9]""{2}|2[0-4][""0-9]|25[0-5])$", ipaddress)
+    if check_ipaddress:
+        return ipaddress
+    else:
+        return None
+
+
 # Get ip_full list from file
+# def get_ip_list():
+#     devices_ip_list = []
+#     try:
+#         with open('ip') as dev_ip:
+#             for line in dev_ip.readlines():
+#                 check_ip = re.findall(r"^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1"
+#                                       "[0-9]""{2}|2[0-4][""0-9]|25[0-5])$", line)
+#                 if not check_ip:
+#                     print(colors.FAIL + "Invalid IP - " + str(line) + colors.ENDC)
+#                 else:
+#                     devices_ip_list.append(line.replace('\n', ''))
+#             dev_ip.close()
+#     except IOError:
+#         print('File do not open because ip_full file does not exist')
+#     devices_ip_list = [line.replace('\n', '')
+#                        for line in dev_ip.readlines()
+#                        if check_ip(ipaddress=line) is not None]
+#     return devices_ip_list
+
+# Get ip list from file
 def get_ip_list():
-    devices_ip_list = []
     try:
-        with open('ip') as dev_ip:
-            for line in dev_ip.readlines():
-                check_ip = re.findall(r"^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1"
-                                      "[0-9]""{2}|2[0-4][""0-9]|25[0-5])$", line)
-                if not check_ip:
-                    print(colors.FAIL + "Invalid IP - " + str(line) + colors.ENDC)
-                else:
-                    devices_ip_list.append(line.replace('\n', ''))
-            dev_ip.close()
+        return [line.replace('\n', '') for line in open('ip').readlines() if check_ip(ipaddress=line) is not None]
     except IOError:
         print('File do not open because ip_full file does not exist')
-    return devices_ip_list
 
 
 # SNMP connection to device for get_device_id

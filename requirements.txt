@@ -1,0 +1,2 @@
+paramiko==2.9.2
+python3-netsnmp==1.1a1
