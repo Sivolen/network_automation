@@ -1,4 +1,4 @@
-import json
+import os
 import re
 import time
 import logging
@@ -96,6 +96,7 @@ def connecting_to_devices(ipaddress):
                 paramiko.SSHException,
                 socket.timeout) as connection_error:
             logger.debug(colors.FAIL + f"\nError connecting to {ipaddress}: {connection_error}" + colors.ENDC)
+            status = connection_error
         try:
             with client.invoke_shell() as ssh_cli:
                 if vendor == 'Cisco':
@@ -159,18 +160,14 @@ def connecting_to_devices(ipaddress):
             logger.debug(f"\nError commands to {ipaddress}: {commands_error}")
         logger.debug(colors.BOLD + f"\nEnd {ipaddress}" + colors.ENDC)
     else:
-        status = None
+        status = 'snmp error'
         logger.debug(f"What's wrong: device {ipaddress} is not support or your community is wrong")
 
-    result_dict = {
-        'ipaddress': ipaddress,
-        'vendor': vendor,
-        'result': status
-    }
-    result_list.append(result_dict)
+    progress = f'ip: {ipaddress}, vendor: {vendor}, status: {status}\n'
+    result_list.append(progress)
 
     with open('progress', 'a') as file:
-        json.dump(result_list, file, indent=4)
+        file.writelines(result_list)
         file.close()
 
 
@@ -178,6 +175,9 @@ def connecting_to_devices(ipaddress):
 def main():
     device_ip_list = get_ip_list()
     print(*device_ip_list)
+
+    if os.path.exists("progress"):
+        os.remove("progress")
 
     multiprocessing.set_start_method("spawn")
     with multiprocessing.Pool(maxtasksperchild=3) as process_pool:
@@ -188,9 +188,17 @@ def main():
         process_pool.join()
 
 
+# View progress after script completed
+def view_progress():
+    with open('progress', encoding='utf-8', errors='ignore') as file:
+        for line in file.readlines():
+            print(line)
+
+
 # Start script execution
 if __name__ == '__main__':
     main()
+    view_progress()
 
     # Print end time work
     print(colors.BOLD + f"\n{datetime.now() - start_time}" + colors.ENDC)
