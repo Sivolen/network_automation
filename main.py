@@ -1,10 +1,12 @@
 import re
 import time
 import logging
+import socket
 import multiprocessing
 
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
+from socket import socket
 
 import netsnmp
 import paramiko
@@ -26,6 +28,7 @@ file_header.setFormatter(log_format)
 logger.addHandler(file_header)
 
 
+# Checking ipaddresses
 def check_ip(ipaddress):
     check_ipaddress = re.findall(r"^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1"
                                  "[0-9]""{2}|2[0-4][""0-9]|25[0-5])$", ipaddress)
@@ -86,7 +89,9 @@ def connecting_to_devices(ipaddress):
             client.connect(hostname=ipaddress, username=user, password=password, port=port, look_for_keys=False,
                            allow_agent=False, timeout=5)
         except (paramiko.AuthenticationException,
-                paramiko.ssh_exception.NoValidConnectionsError, paramiko.SSHException) as connection_error:
+                paramiko.ssh_exception.NoValidConnectionsError,
+                paramiko.SSHException,
+                socket.timeout) as connection_error:
             logger.debug(colors.FAIL + f"\nError connecting to {ipaddress}: {connection_error}" + colors.ENDC)
         try:
             with client.invoke_shell() as ssh_cli:
@@ -112,14 +117,13 @@ def connecting_to_devices(ipaddress):
                         ssh_cli.send('exit\n'.encode())
                         time.sleep(0.5)
                         ssh_cli.send('wr\n'.encode())
-                        time.sleep(1)
+                        time.sleep(5)
                     elif re.search(r'\b10.0.3.14\b', result):
                         time.sleep(0.5)
                         logger.debug(f'{ipaddress}: tacacs server is already new')
                     elif re.search(r'\b\b', result):
                         time.sleep(0.5)
                         logger.debug('Tacacs server is not configured')
-
                     print(result)
                     client.close()
                 elif vendor == "Hua":
@@ -134,12 +138,11 @@ def connecting_to_devices(ipaddress):
                     result = ssh_cli.recv(99999).decode('ascii')
 
                     if re.search(r'\b10.0.0.172\b', result):
-                        logger.debug(f'{ipaddress}: tacacs server is old version')
+                        logger.info(f'{ipaddress}: tacacs server is old version')
                     elif re.search(r'\b10.0.3.14\b', result):
-                        logger.debug(f'{ipaddress}: tacacs server is already new')
+                        logger.info(f'{ipaddress}: tacacs server is already new')
                     elif re.search(r'\b\b', result):
-                        logger.debug(f'{ipaddress}: tacacs server is not configured')
-
+                        logger.info(f'{ipaddress}: tacacs server is not configured')
                     print(result)
                     client.close()
         except Exception as commands_error:
