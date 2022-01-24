@@ -1,3 +1,4 @@
+import json
 import re
 import time
 import logging
@@ -80,6 +81,8 @@ def get_device_id(ipaddress):
 
 # Function ssh connectivity and sensing device commands without multiprocessing
 def connecting_to_devices(ipaddress):
+    status = ''
+    result_list = []
     vendor = get_device_id(ipaddress)
     if vendor is not None:
         logger.debug(colors.BOLD + f"\nStart connection to: {ipaddress} ({vendor})" + colors.ENDC)
@@ -118,11 +121,14 @@ def connecting_to_devices(ipaddress):
                         time.sleep(0.5)
                         ssh_cli.send('wr\n'.encode())
                         time.sleep(5)
+                        status = 'Update'
                     elif re.search(r'\b10.0.3.14\b', result):
                         time.sleep(0.5)
+                        status = 'No update needed'
                         logger.debug(f'{ipaddress}: tacacs server is already new')
                     elif re.search(r'\b\b', result):
                         time.sleep(0.5)
+                        status = 'Need configuration'
                         logger.debug('Tacacs server is not configured')
                     print(result)
                     client.close()
@@ -139,17 +145,33 @@ def connecting_to_devices(ipaddress):
 
                     if re.search(r'\b10.0.0.172\b', result):
                         logger.info(f'{ipaddress}: tacacs server is old version')
+                        status = 'Update needed'
                     elif re.search(r'\b10.0.3.14\b', result):
                         logger.info(f'{ipaddress}: tacacs server is already new')
+                        status = 'No update needed'
                     elif re.search(r'\b\b', result):
                         logger.info(f'{ipaddress}: tacacs server is not configured')
+                        status = 'Need configuration'
                     print(result)
                     client.close()
+
         except Exception as commands_error:
             logger.debug(f"\nError commands to {ipaddress}: {commands_error}")
         logger.debug(colors.BOLD + f"\nEnd {ipaddress}" + colors.ENDC)
     else:
+        status = None
         logger.debug(f"What's wrong: device {ipaddress} is not support or your community is wrong")
+
+    result_dict = {
+        'ipaddress': ipaddress,
+        'vendor': vendor,
+        'result': status
+    }
+    result_list.append(result_dict)
+
+    with open('progress', 'a') as file:
+        json.dump(result_list, file, indent=4)
+        file.close()
 
 
 # Main funktion, init multiprocess
