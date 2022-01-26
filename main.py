@@ -2,12 +2,11 @@ import os
 import re
 import time
 import logging
-import socket
 import multiprocessing
 
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
-from socket import socket
+# from socket import socket
 
 import netsnmp
 import paramiko
@@ -82,7 +81,6 @@ def get_device_id(ipaddress):
 # Function ssh connectivity and sensing device commands without multiprocessing
 def connecting_to_devices(ipaddress):
     status = ''
-    result_list = []
     vendor = get_device_id(ipaddress)
     if vendor is not None:
         logger.debug(colors.BOLD + f"\nStart connection to: {ipaddress} ({vendor})" + colors.ENDC)
@@ -91,10 +89,11 @@ def connecting_to_devices(ipaddress):
         try:
             client.connect(hostname=ipaddress, username=user, password=password, port=port, look_for_keys=False,
                            allow_agent=False, timeout=5)
-        except (paramiko.AuthenticationException,
-                paramiko.ssh_exception.NoValidConnectionsError,
-                paramiko.SSHException,
-                socket.timeout) as connection_error:
+        # except (paramiko.AuthenticationException,
+        #         paramiko.ssh_exception.NoValidConnectionsError,
+        #         paramiko.SSHException,
+        #         socket.timeout) as connection_error:
+        except Exception as connection_error:
             logger.debug(colors.FAIL + f"\nError connecting to {ipaddress}: {connection_error}" + colors.ENDC)
             status = connection_error
         try:
@@ -103,9 +102,10 @@ def connecting_to_devices(ipaddress):
                     ssh_cli.send('terminal length 0\n'.encode())
                     time.sleep(0.5)
                     ssh_cli.send('sh run | i tacacs-server host\n'.encode())
+                    time.sleep(1)
 
                     # This timer needed for buffered result in "result"
-                    time.sleep(3)
+                    time.sleep(5)
 
                     result = ssh_cli.recv(99999).decode('ascii')
 
@@ -122,7 +122,7 @@ def connecting_to_devices(ipaddress):
                         time.sleep(0.5)
                         ssh_cli.send('wr\n'.encode())
                         time.sleep(5)
-                        status = 'Update'
+                        status = 'Updated'
                     elif re.search(r'\b10.0.3.14\b', result):
                         time.sleep(0.5)
                         status = 'No update needed'
@@ -138,9 +138,10 @@ def connecting_to_devices(ipaddress):
                     ssh_cli.send('screen-length 0 temporary\n'.encode())
                     time.sleep(1)
                     ssh_cli.send('dis cur | i hwtacacs server authentication\n'.encode())
-
-                    # This timer needed for buffered result in "result"
                     time.sleep(3)
+                    ssh_cli.send('dis cur | i hwtacacs-server authentication\n'.encode())
+                    # This timer needed for buffered result in "result"
+                    time.sleep(4)
 
                     result = ssh_cli.recv(99999).decode('ascii')
 
@@ -163,12 +164,21 @@ def connecting_to_devices(ipaddress):
         status = 'snmp error'
         logger.debug(f"What's wrong: device {ipaddress} is not support or your community is wrong")
 
-    progress = f'ip: {ipaddress}, vendor: {vendor}, status: {status}\n'
-    result_list.append(progress)
+    if vendor == 'Hua' and status == 'Need configuration':
+        with open('progress_hua', 'a') as file:
+            file.writelines(f'ip: {ipaddress}, vendor: {vendor}, status: {status}\n')
+            file.close()
 
-    with open('progress', 'a') as file:
-        file.writelines(result_list)
-        file.close()
+    elif vendor == 'Cisco' and status == 'Need configuration':
+        with open('progress_cisco', 'a') as file:
+            file.writelines(f'ip: {ipaddress}, vendor: {vendor}, status: {status}\n')
+            file.close()
+
+    # elif status == 'Updated':
+    else:
+        with open('progress', 'a') as file:
+            file.writelines(f'ip: {ipaddress}, vendor: {vendor}, status: {status}\n')
+            file.close()
 
 
 # Main funktion, init multiprocess
@@ -176,16 +186,21 @@ def main():
     device_ip_list = get_ip_list()
     print(*device_ip_list)
 
+    if os.path.exists("progress_hua"):
+        os.remove("progress_hua")
+    if os.path.exists("progress_cisco"):
+        os.remove("progress_cisco")
     if os.path.exists("progress"):
         os.remove("progress")
 
     multiprocessing.set_start_method("spawn")
-    with multiprocessing.Pool(maxtasksperchild=3) as process_pool:
+    with multiprocessing.Pool(maxtasksperchild=30) as process_pool:
         # ssh_connect - function, device_ip_list - argument
-        process_pool.map(connecting_to_devices, device_ip_list, 1)
+        process_pool.map(connecting_to_devices, device_ip_list, 3)
 
         process_pool.close()
         process_pool.join()
+    # view_progress()
 
 
 # View progress after script completed
@@ -198,7 +213,6 @@ def view_progress():
 # Start script execution
 if __name__ == '__main__':
     main()
-    view_progress()
 
     # Print end time work
     print(colors.BOLD + f"\n{datetime.now() - start_time}" + colors.ENDC)
