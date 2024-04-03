@@ -3,6 +3,7 @@ import re
 import time
 import logging
 import multiprocessing
+from pysnmp.hlapi import *
 
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
@@ -32,10 +33,7 @@ logger.addHandler(file_header)
 def check_ip(ipaddress):
     check_ipaddress = re.findall(r"^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1"
                                  "[0-9]""{2}|2[0-4][""0-9]|25[0-5])$", ipaddress)
-    if check_ipaddress:
-        return ipaddress
-    else:
-        return None
+    return ipaddress if check_ipaddress else False
 
 
 # Get ip list from file
@@ -55,27 +53,49 @@ def snmp_connection(ip, community):
     return snmp_res
 
 
+def snmp_connect(ip):
+    res = None
+    iterator = getCmd(SnmpEngine(),
+                      CommunityData(community1),
+                      UdpTransportTarget((ip, 161)),
+                      ContextData(),
+                      ObjectType(ObjectIdentity('SNMPv2-MIB', 'sysDescr', 0)))
+
+    errorIndication, errorStatus, errorIndex, varBinds = next(iterator)
+
+    if errorIndication:
+
+        iterator = getCmd(SnmpEngine(),
+                          CommunityData(community2),
+                          UdpTransportTarget((ip, 161)),
+                          ContextData(),
+                          ObjectType(ObjectIdentity('SNMPv2-MIB', 'sysDescr', 0)))
+
+        errorIndication, errorStatus, errorIndex, varBinds = next(iterator)
+    for varBind in varBinds:  # SNMP response contents
+        res = (' = '.join([x.prettyPrint() for x in varBind]))
+    return res
+
+
 # Get device vendor from snmp
 def get_device_id(ipaddress):
-    vendor_id = None
     snmp_walk = ''
-    if vendor_id is None:
-        # print(f'analyze device {ipaddreess}')
-        try:
-            # snmp_walk = snmp_walk(oids='1.3.6.1.2.1.1.1', hostname=ipaddreess, community=community1, version=2)
-            snmp_walk = snmp_connection(ipaddress, community1)
-            if snmp_walk == ():
-                snmp_walk = snmp_connection(ipaddress, community2)
-        except Exception as snmp_error:
-            logger.debug(f'{ipaddress}: snmp connections error ' + str(snmp_error))
-        if re.search(r'\bCisco\b', str(snmp_walk)):
-            vendor_id = 'Cisco'
-        elif re.search(r'\bHuawei\b', str(snmp_walk)) or \
-                re.search(r'\bHUAWEI\b', str(snmp_walk)):
-            vendor_id = 'Hua'
-        elif re.search(r'', str(snmp_walk)):
-            vendor_id = None
-    return vendor_id
+    print(f'analyze device {ipaddress}')
+    try:
+        # snmp_walk = snmp_walk(oids='1.3.6.1.2.1.1.1', hostname=ipaddreess, community=community1, version=2)
+        snmp_walk = snmp_connect(ip=ipaddress)
+        # snmp_walk = snmp_connection(ipaddress, community1)
+        # if snmp_walk == ():
+        #     snmp_walk = snmp_connection(ipaddress, community2)
+    except Exception as snmp_error:
+        logger.debug(f'{ipaddress}: snmp connections error ' + str(snmp_error))
+    if re.search(r'\bCisco\b', str(snmp_walk)):
+        return 'Cisco'
+    elif re.search(r'\bHuawei\b', str(snmp_walk)) or \
+            re.search(r'\bHUAWEI\b', str(snmp_walk)):
+        return 'Hua'
+    elif re.search(r'', str(snmp_walk)):
+        return None
 
 
 # Function ssh connectivity and sensing device commands without multiprocessing
@@ -88,7 +108,7 @@ def connecting_to_devices(ipaddress):
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         try:
             client.connect(hostname=ipaddress, username=user, password=password, port=port, look_for_keys=False,
-                           allow_agent=False, timeout=5)
+                           allow_agent=False, timeout=10)
         # except (paramiko.AuthenticationException,
         #         paramiko.ssh_exception.NoValidConnectionsError,
         #         paramiko.SSHException,
@@ -100,60 +120,72 @@ def connecting_to_devices(ipaddress):
             with client.invoke_shell() as ssh_cli:
                 if vendor == 'Cisco':
                     ssh_cli.send('terminal length 0\n'.encode())
-                    time.sleep(0.5)
-                    ssh_cli.send('sh run | i tacacs-server host\n'.encode())
                     time.sleep(1)
+                    ssh_cli.send('conf t\n'.encode())
+                    time.sleep(0.5)
+                    ssh_cli.send('err rec ca all\n'.encode())
+                    time.sleep(0.5)
+                    ssh_cli.send('err rec int 60\n'.encode())
+                    time.sleep(0.5)
+                    ssh_cli.send('no spanning-tree etherchannel guard misconfig\n'.encode())
+                    time.sleep(0.5)
+                    ssh_cli.send('aaa authorization console\n'.encode())
+                    time.sleep(0.5)
+                    ssh_cli.send('no enable password\n'.encode())
+                    time.sleep(0.5)
+                    ssh_cli.send('enable secret z5WRgV8A\n'.encode())
+                    time.sleep(0.5)
+                    # for interface in open('int').readlines():
+                    #
+                    #     ssh_cli.send(f'int {interface}\n'.encode())
+                    #     time.sleep(0.5)
+                    #     ssh_cli.send('no desc\n'.encode())
+                    #     time.sleep(0.5)
+                    ssh_cli.send('exit\n'.encode())
+                    time.sleep(0.5)
+                    ssh_cli.send('wr\n'.encode())
+                    time.sleep(0.5)
+                    # ssh_cli.send('wr\n'.encode())
 
                     # This timer needed for buffered result in "result"
-                    time.sleep(5)
-
                     result = ssh_cli.recv(99999).decode('ascii')
 
-                    if re.search(r'\b10.0.0.172\b', result):
+                    if re.search(r'\bntp logging\b', result):
                         time.sleep(0.5)
-                        logger.debug(f'Tacacs server is old')
+                        logger.debug(f'ntp is old')
                         ssh_cli.send('conf t\n'.encode())
                         time.sleep(0.5)
-                        ssh_cli.send('tacacs-server host 10.0.3.14\n'.encode())
+                        ssh_cli.send('no ntp logging\n'.encode())
                         time.sleep(0.5)
-                        ssh_cli.send('no tacacs-server host 10.0.0.172\n'.encode())
+                        ssh_cli.send('no ntp clock-period\n'.encode())
                         time.sleep(0.5)
                         ssh_cli.send('exit\n'.encode())
                         time.sleep(0.5)
                         ssh_cli.send('wr\n'.encode())
                         time.sleep(5)
-                        status = 'Updated'
-                    elif re.search(r'\b10.0.3.14\b', result):
-                        time.sleep(0.5)
-                        status = 'No update needed'
-                        logger.debug(f'{ipaddress}: tacacs server is already new')
+                        status = 'NTP changed'
                     elif re.search(r'\b\b', result):
                         time.sleep(0.5)
-                        status = 'Need configuration'
-                        logger.debug('Tacacs server is not configured')
+                        status = 'NTP is new'
+                        logger.debug('NTP is new')
                     print(result)
                     client.close()
                 elif vendor == "Hua":
                     time.sleep(1)
                     ssh_cli.send('screen-length 0 temporary\n'.encode())
                     time.sleep(1)
-                    ssh_cli.send('dis cur | i hwtacacs server authentication\n'.encode())
-                    time.sleep(3)
-                    ssh_cli.send('dis cur | i hwtacacs-server authentication\n'.encode())
+                    ssh_cli.send('dis cur | i 10.230.\n'.encode())
                     # This timer needed for buffered result in "result"
                     time.sleep(4)
 
                     result = ssh_cli.recv(99999).decode('ascii')
 
-                    if re.search(r'\b10.0.0.172\b', result):
-                        logger.info(f'{ipaddress}: tacacs server is old version')
-                        status = 'Update needed'
-                    elif re.search(r'\b10.0.3.14\b', result):
-                        logger.info(f'{ipaddress}: tacacs server is already new')
-                        status = 'No update needed'
+                    if re.search(r'\b10.230.\b', result):
+                        logger.info(f'{ipaddress}: ntp server is old version')
+                        status = 'NTP changed'
                     elif re.search(r'\b\b', result):
-                        logger.info(f'{ipaddress}: tacacs server is not configured')
-                        status = 'Need configuration'
+                        logger.info(f'{ipaddress}: ntp server is not configured')
+                        status = 'NTP is new'
                     print(result)
                     client.close()
 
@@ -164,12 +196,12 @@ def connecting_to_devices(ipaddress):
         status = 'snmp error'
         logger.debug(f"What's wrong: device {ipaddress} is not support or your community is wrong")
 
-    if vendor == 'Hua' and status == 'Need configuration':
+    if vendor == 'Hua' and status == 'NTP changed':
         with open('progress_hua', 'a') as file:
             file.writelines(f'ip: {ipaddress}, vendor: {vendor}, status: {status}\n')
             file.close()
 
-    elif vendor == 'Cisco' and status == 'Need configuration':
+    elif vendor == 'Cisco' and status == 'NTP changed':
         with open('progress_cisco', 'a') as file:
             file.writelines(f'ip: {ipaddress}, vendor: {vendor}, status: {status}\n')
             file.close()
@@ -184,7 +216,7 @@ def connecting_to_devices(ipaddress):
 # Main funktion, init multiprocess
 def main():
     device_ip_list = get_ip_list()
-    print(*device_ip_list)
+    # print(*device_ip_list)
 
     if os.path.exists("progress_hua"):
         os.remove("progress_hua")
@@ -194,7 +226,7 @@ def main():
         os.remove("progress")
 
     multiprocessing.set_start_method("spawn")
-    with multiprocessing.Pool(maxtasksperchild=30) as process_pool:
+    with multiprocessing.Pool(maxtasksperchild=1) as process_pool:
         # ssh_connect - function, device_ip_list - argument
         process_pool.map(connecting_to_devices, device_ip_list, 3)
 

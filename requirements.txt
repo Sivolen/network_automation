@@ -1,2 +1,12 @@
-paramiko==2.9.2
+paramiko~=2.9.3
 python3-netsnmp==1.1a1
+pysmi~=0.3.4
+pip~=22.0.2
+keyring~=23.5.0
+ply~=3.11
+six~=1.16.0
+pyasn1~=0.6.0
+pysnmp~=4.4.12
+bcrypt~=3.2.0
+cryptography~=3.4.8
+setuptools~=59.6.0
