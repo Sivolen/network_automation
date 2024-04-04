@@ -166,10 +166,6 @@ def connecting_to_devices(ipaddress):
                     time.sleep(0.5)
                     ssh_cli.send("aaa authorization console\n".encode())
                     time.sleep(0.5)
-                    ssh_cli.send("no enable password\n".encode())
-                    time.sleep(0.5)
-                    ssh_cli.send("enable secret z5WRgV8AfsFa\n".encode())
-                    time.sleep(0.5)
                     # for interface in open('int').readlines():
                     #
                     #     ssh_cli.send(f'int {interface}\n'.encode())
